@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expense Tracker</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f5f6f8; color: #222; font-family: "Segoe UI", system-ui, Arial, sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 20px 40px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+  h1 { font-size: 24px; margin: 0; font-weight: 600; }
+  #total { font-size: 18px; font-weight: 600; color: #2f6fed; }
+  .card { background: #fff; border-radius: 6px; padding: 14px; margin-top: 14px; }
+  form { display: grid; grid-template-columns: 1fr 110px 140px auto; gap: 6px 10px; align-items: end; }
+  label { font-size: 13px; display: block; margin-bottom: 3px; }
+  input, select { width: 100%; height: 34px; padding: 0 8px; border: 1px solid #cfd3d9; border-radius: 3px; font: inherit; background: #fff; }
+  input:focus, select:focus { outline: none; border-color: #2f6fed; }
+  .add { height: 34px; padding: 0 22px; background: #2f6fed; color: #fff; border: 0; border-radius: 3px; font: inherit; font-weight: 600; cursor: pointer; }
+  .add:hover { background: #1f56c4; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: #eceef2; text-align: left; padding: 8px; font-weight: 600; }
+  td { padding: 8px; border-bottom: 1px solid #f0f1f4; }
+  th.num, td.num { text-align: right; }
+  tbody tr { cursor: pointer; }
+  tbody tr.sel { background: #dbe6fd; }
+  .empty { text-align: center; color: #6b7280; padding: 24px 8px; }
+  .actions { margin-top: 12px; display: flex; gap: 8px; }
+  .btn { height: 34px; padding: 0 16px; background: #e9eaee; border: 1px solid #cfd3d9; border-radius: 3px; font: inherit; cursor: pointer; }
+  .btn:hover { background: #dfe1e6; }
+  #summary { margin-top: 14px; font-size: 14px; color: #6b7280; }
+  #error { color: #b42318; font-size: 13px; margin-top: 8px; min-height: 18px; }
+  footer { margin-top: 28px; font-size: 12px; color: #9aa0a8; }
+  @media (max-width: 600px) { form { grid-template-columns: 1fr 1fr; } .add { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Expense Tracker</h1>
+    <span id="total">Total: &#8377;0.00</span>
+  </header>
+
+  <div class="card">
+    <form id="form" autocomplete="off">
+      <div><label for="desc">Description</label><input id="desc" type="text" placeholder="Lunch at canteen"></div>
+      <div><label for="amount">Amount (&#8377;)</label><input id="amount" type="text" inputmode="decimal" placeholder="120"></div>
+      <div><label for="cat">Category</label>
+        <select id="cat">
+          <option>Food</option><option>Transport</option><option>Shopping</option>
+          <option>Bills</option><option>Education</option><option>Other</option>
+        </select>
+      </div>
+      <button class="add" type="submit">Add</button>
+    </form>
+    <div id="error" role="alert"></div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Amount (&#8377;)</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="del" type="button">Delete selected</button>
+    <button class="btn" id="clear" type="button">Clear all</button>
+  </div>
+
+  <div id="summary"></div>
+
+  <footer>Web preview of the Tkinter desktop app (expense_tracker.py). Data is stored in this browser only.</footer>
+</div>
+
+<script>
+  var KEY = "expenses_v1";
+  var expenses = [];
+  var selected = new Set();
+
+  try { expenses = JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { expenses = []; }
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(expenses)); } catch (e) {} }
+  function money(n) { return "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function today() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  function render() {
+    var body = document.getElementById("rows");
+    body.textContent = "";
+    if (!expenses.length) {
+      var tr = document.createElement("tr");
+      var td = document.createElement("td");
+      td.colSpan = 4; td.className = "empty"; td.textContent = "No expenses yet. Add your first one above.";
+      tr.appendChild(td); body.appendChild(tr);
+    }
+    expenses.forEach(function (e, i) {
+      var tr = document.createElement("tr");
+      if (selected.has(i)) tr.className = "sel";
+      [e.date, e.description, e.category, e.amount.toFixed(2)].forEach(function (v, j) {
+        var td = document.createElement("td");
+        td.textContent = v;
+        if (j === 3) td.className = "num";
+        tr.appendChild(td);
+      });
+      tr.addEventListener("click", function () {
+        if (selected.has(i)) selected.delete(i); else selected.add(i);
+        render();
+      });
+      body.appendChild(tr);
+    });
+
+    var total = expenses.reduce(function (s, e) { return s + e.amount; }, 0);
+    document.getElementById("total").textContent = "Total: " + money(total);
+
+    var by = {};
+    expenses.forEach(function (e) { by[e.category] = (by[e.category] || 0) + e.amount; });
+    var parts = Object.keys(by).sort(function (a, b) { return by[b] - by[a]; })
+      .map(function (c) { return c + ": " + money(by[c]); });
+    document.getElementById("summary").textContent = parts.length ? "By category  |  " + parts.join("   ") : "";
+  }
+
+  function showError(msg) { document.getElementById("error").textContent = msg; }
+
+  document.getElementById("form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var desc = document.getElementById("desc").value.trim();
+    var amount = parseFloat(document.getElementById("amount").value.trim());
+    if (!desc) { showError("Enter a description."); return; }
+    if (!isFinite(amount) || amount <= 0) { showError("Enter a positive number for the amount."); return; }
+    showError("");
+    expenses.push({
+      date: today(), description: desc,
+      category: document.getElementById("cat").value,
+      amount: Math.round(amount * 100) / 100
+    });
+    save();
+    document.getElementById("desc").value = "";
+    document.getElementById("amount").value = "";
+    document.getElementById("desc").focus();
+    render();
+  });
+
+  document.getElementById("del").addEventListener("click", function () {
+    if (!selected.size) { showError("Select a row first."); return; }
+    showError("");
+    expenses = expenses.filter(function (_, i) { return !selected.has(i); });
+    selected.clear();
+    save(); render();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    if (expenses.length && confirm("Delete every expense?")) {
+      expenses = []; selected.clear(); save(); render();
+    }
+  });
+
+  render();
+</script>
+</body>
+</html>
